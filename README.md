@@ -9,10 +9,10 @@ Materials for the DP-CGANS part of the TDCC-SSH workshop **Unlock Your Sensitive
 
 | path | what |
 |---|---|
-| `dpcgans_hands_on.ipynb` | the 15-minute hands-on notebook (install, inspect, train, evaluate, train with differential privacy) |
+| `dpcgans_hands_on.ipynb` | the 15-minute hands-on notebook: install, load, train, sample, compare, train with differential privacy, load a longer-trained generator. Follows the usage example on PyPI. |
 | `data/census_workshop.csv` | the workshop table: 46 012 rows, 7 columns, built from the public UCI census income data (OpenML `adult` v2) |
 | `data/census_train_5000.csv` | the 5 000 rows the pre-trained generators were trained on |
-| `data/synthetic_*.csv` | 5 000 synthetic rows sampled from each pre-trained generator |
+| `data/synthetic_*.csv` | 5 000 synthetic rows sampled from each pre-trained generator (not used by the notebook, kept for reference) |
 | `models/dpcgan_plain_300ep.pkl` | DP-CGAN trained 300 epochs without differential privacy |
 | `models/dpcgan_private_100ep.pkl` | DP-CGAN trained 100 epochs with differential privacy |
 | `scripts/prepare_data.py` | rebuilds `data/census_workshop.csv` |
