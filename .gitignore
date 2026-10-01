@@ -1,0 +1,5 @@
+fitted_transformer.pkl
+loss_output_*.txt
+__pycache__/
+.ipynb_checkpoints/
+*_executed.ipynb
