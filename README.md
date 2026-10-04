@@ -22,10 +22,10 @@ Materials for the DP-CGANS part of the TDCC-SSH workshop **Unlock Your Sensitive
 ## Notes for the presenter
 
 * Training 40 epochs on 2 000 rows takes about 20 s on a laptop and about 1 to 2 minutes on the free Colab CPU. No GPU needed.
-* The pre-trained generator needed 1 000 epochs: at 300 epochs the age distribution was still visibly off. A deeper network (three layers of 256) matched the categories better but not age; batch size 100 for 500 epochs matched correlations better but widened age. Default settings for 1 000 epochs were the best compromise.
+* The pre-trained generator needed 1 000 epochs: at 300 epochs the age distribution was still visibly off. A deeper network (three layers of 256) matched the categories better but not age; batch size 100 for 500 epochs matched correlations better but widened age. Default settings for 1 000 epochs were the best compromise. Training 2 000 epochs matched the categories and correlations even better but let age drift (mean 44 against 39 real): GAN training is not monotonic, so check the checkpoint you ship.
 * Training time in DP-CGANS grows quickly with the number of categories, because the conditional loss works on pairs of categorical columns. The census columns were collapsed to 2 to 4 categories each for that reason. A column with 40 categories makes an epoch take minutes.
 * dp-cgans caches `fitted_transformer.pkl` in the working directory and reuses it silently. The notebook deletes it before every training run. Keep that if you adapt the code.
-* `private=True` uses a fixed noise multiplier; the reported epsilon grows with the number of epochs.
+* `private=True` uses a fixed noise multiplier; the reported epsilon grows with the number of epochs. Longer private training does not help here: a 300-epoch private run collapsed (synthetic mean age 71 against 39 real), so the shipped private generator is the 100-epoch one.
 
 ## Rebuild
 
