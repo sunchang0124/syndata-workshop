@@ -13,7 +13,7 @@ Materials for the DP-CGANS part of the TDCC-SSH workshop **Unlock Your Sensitive
 | `data/census_workshop.csv` | the workshop table: 46 012 rows, 7 columns, built from the public UCI census income data (OpenML `adult` v2) |
 | `data/census_train_5000.csv` | the 5 000 rows the pre-trained generators were trained on |
 | `data/synthetic_*.csv` | 5 000 synthetic rows sampled from each pre-trained generator (not used by the notebook, kept for reference) |
-| `models/dpcgan_plain_300ep.pkl` | DP-CGAN trained 300 epochs without differential privacy |
+| `models/dpcgan_best.pkl` | DP-CGAN trained 1 000 epochs on 5 000 rows without differential privacy, default settings, batch size 500 |
 | `models/dpcgan_private_100ep.pkl` | DP-CGAN trained 100 epochs with differential privacy |
 | `scripts/prepare_data.py` | rebuilds `data/census_workshop.csv` |
 | `scripts/pretrain.py` | retrains the fallback generators |
@@ -22,6 +22,7 @@ Materials for the DP-CGANS part of the TDCC-SSH workshop **Unlock Your Sensitive
 ## Notes for the presenter
 
 * Training 40 epochs on 2 000 rows takes about 20 s on a laptop and about 1 to 2 minutes on the free Colab CPU. No GPU needed.
+* The pre-trained generator needed 1 000 epochs: at 300 epochs the age distribution was still visibly off. A deeper network (three layers of 256) matched the categories better but not age; batch size 100 for 500 epochs matched correlations better but widened age. Default settings for 1 000 epochs were the best compromise.
 * Training time in DP-CGANS grows quickly with the number of categories, because the conditional loss works on pairs of categorical columns. The census columns were collapsed to 2 to 4 categories each for that reason. A column with 40 categories makes an epoch take minutes.
 * dp-cgans caches `fitted_transformer.pkl` in the working directory and reuses it silently. The notebook deletes it before every training run. Keep that if you adapt the code.
 * `private=True` uses a fixed noise multiplier; the reported epsilon grows with the number of epochs.
@@ -31,7 +32,7 @@ Materials for the DP-CGANS part of the TDCC-SSH workshop **Unlock Your Sensitive
 ```bash
 pip install dp-cgans nbformat scikit-learn
 python scripts/prepare_data.py
-python scripts/pretrain.py plain 300      # ~6 min on a laptop CPU
+python scripts/pretrain.py plain 1000     # ~15 min on a laptop CPU, then rename to models/dpcgan_best.pkl
 python scripts/pretrain.py private 100
 python scripts/build_notebook.py
 ```

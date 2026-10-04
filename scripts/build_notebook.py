@@ -111,24 +111,81 @@ compare(tabular_data, private_syn_data, "After 40 training rounds, with differen
 """)
 
 md(r"""
-## 7. What more training looks like
+## 7. A generator trained longer
 
-A generator usually needs a few hundred rounds. We trained the same model for **300 rounds on 5 000 rows** before the workshop (six minutes on a laptop). Load it and compare.
+A generator usually needs many hundreds of rounds. We trained the same model for **1 000 rounds on 5 000 rows** before the workshop. Load it and compare: this is the quality you can expect from DP-CGANS on a small table.
 """)
 code(rf"""
 import urllib.request
 
-urllib.request.urlretrieve("{REPO}/models/dpcgan_plain_300ep.pkl", "dpcgan_plain_300ep.pkl")
-trained_model = DP_CGAN.load("dpcgan_plain_300ep.pkl")
+urllib.request.urlretrieve("{REPO}/models/dpcgan_best.pkl", "dpcgan_best.pkl")
+trained_model = DP_CGAN.load("dpcgan_best.pkl")
 
-compare(tabular_data, trained_model.sample(2000), "After 300 training rounds")
+syn_trained = trained_model.sample(len(tabular_data))
+compare(tabular_data, syn_trained, "After 1 000 training rounds")
 """)
 
 md(r"""
-## 8. If you have time left
+## 8. Would a statistician get the same answers?
+
+Looking similar is not the point. The point is that an analysis done on the synthetic data gives the same conclusions as on the real data. Three quick checks: descriptive statistics, a cross-table, and the correlations between all variables.
+""")
+code(r"""
+# Descriptive statistics side by side
+pd.concat({"real": tabular_data.describe().T, "synthetic": syn_trained.describe().T}, axis=1).round(1)
+""")
+code(r"""
+# A cross-table: share of high income by education level
+pd.concat({"real": pd.crosstab(tabular_data["education"], tabular_data["income"], normalize="index")["high"],
+           "synthetic": pd.crosstab(syn_trained["education"], syn_trained["income"], normalize="index")["high"]}, axis=1).round(2)
+""")
+code(r"""
+# Correlations between all variables (categories turned into 0/1 columns), real vs synthetic, and the difference
+import seaborn as sns
+
+real_corr = pd.get_dummies(tabular_data, dtype=float).corr()
+syn_corr  = pd.get_dummies(syn_trained, dtype=float).corr().reindex_like(real_corr)
+
+fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+sns.heatmap(real_corr, ax=axes[0], cmap="RdBu_r", vmin=-1, vmax=1, cbar=False); axes[0].set_title("real")
+sns.heatmap(syn_corr,  ax=axes[1], cmap="RdBu_r", vmin=-1, vmax=1, cbar=False, yticklabels=False); axes[1].set_title("synthetic")
+sns.heatmap((real_corr - syn_corr).abs(), ax=axes[2], cmap="Reds", vmin=0, vmax=1, yticklabels=False); axes[2].set_title("absolute difference")
+plt.tight_layout(); plt.show()
+
+print("average absolute difference in correlation:", round(float((real_corr - syn_corr).abs().mean().mean()), 3), "(0 = identical)")
+""")
+
+md(r"""
+### The same regression on both datasets
+
+A logistic regression of high income on age, working hours, sex and education. If the synthetic data is useful, the coefficients point the same way and have a similar size.
+""")
+code(r"""
+import statsmodels.formula.api as smf
+
+formula = "high ~ age + hours_per_week + C(sex) + C(education)"
+
+def fit_logit(df):
+    df = df.assign(high=(df["income"] == "high").astype(int))
+    return smf.logit(formula, data=df).fit(disp=0)
+
+real_fit, syn_fit = fit_logit(tabular_data), fit_logit(syn_trained)
+pd.DataFrame({"real coefficient": real_fit.params, "synthetic coefficient": syn_fit.params,
+              "real p-value": real_fit.pvalues, "synthetic p-value": syn_fit.pvalues}).round(3)
+""")
+md(r"""
+**What to take from this**
+
+* Where the real and synthetic coefficients agree in sign and rough size, a researcher could develop and test this analysis on the synthetic data and only run the final version on the real data.
+* Where they disagree, the synthetic data would have led you astray. That is why synthetic data must always be evaluated against the analysis you care about, not only on how it looks.
+""")
+
+md(r"""
+## 9. If you have time left
 
 * Change `epochs=40` to `epochs=100` in step 3 and run steps 3 to 5 again.
 * Ask for more rows than you had: `trained_model.sample(50000)`.
+* Run the regression of step 8 on your own 40-round synthetic data (`fit_logit(syn_data)`) and on the private one. How wrong would your conclusions be?
 * Upload your own CSV with the cell below, **public or already anonymised data only**, and train on it. Keep it to about 10 columns with few categories each, or training gets slow.
 """)
 code(r"""
