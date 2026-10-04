@@ -128,22 +128,57 @@ compare(tabular_data, syn_trained, "After 1 000 training rounds")
 md(r"""
 ## 8. Would a statistician get the same answers?
 
-Looking similar is not the point. The point is that an analysis done on the synthetic data gives the same conclusions as on the real data. Three quick checks: descriptive statistics, a cross-table, and the correlations between all variables.
+Looking similar is not the point. The point is that an analysis done on the synthetic data leads to the same conclusions as on the real data. We run the same analyses on both and put the results side by side. We use 5 000 synthetic rows for stable estimates.
 """)
 code(r"""
-# Descriptive statistics side by side
-pd.concat({"real": tabular_data.describe().T, "synthetic": syn_trained.describe().T}, axis=1).round(1)
+syn_trained = trained_model.sample(5000)
+real = tabular_data
+
+# 1. Descriptive statistics
+pd.concat({"real": real.describe().T, "synthetic": syn_trained.describe().T}, axis=1).round(1)
 """)
 code(r"""
-# A cross-table: share of high income by education level
-pd.concat({"real": pd.crosstab(tabular_data["education"], tabular_data["income"], normalize="index")["high"],
-           "synthetic": pd.crosstab(syn_trained["education"], syn_trained["income"], normalize="index")["high"]}, axis=1).round(2)
+# 2. Group comparison: are people with a high income older, and do they work more hours?
+from scipy.stats import ttest_ind
+
+def group_means(df):
+    out = df.groupby("income")[["age", "hours_per_week"]].mean().T
+    out["difference"] = out["high"] - out["low"]
+    out["p-value"] = [ttest_ind(df.loc[df.income == "high", c], df.loc[df.income == "low", c]).pvalue for c in out.index]
+    return out
+
+pd.concat({"real": group_means(real), "synthetic": group_means(syn_trained)}, axis=1).round(3)
 """)
 code(r"""
-# Correlations between all variables (categories turned into 0/1 columns), real vs synthetic, and the difference
+# 3. Cross-tables: share of high income by education and by marital status
+def share_high(df, col):
+    return pd.crosstab(df[col], df["income"], normalize="index")["high"]
+
+pd.concat({"real": pd.concat([share_high(real, "education"), share_high(real, "marital_status")]),
+           "synthetic": pd.concat([share_high(syn_trained, "education"), share_high(syn_trained, "marital_status")])}, axis=1).round(2)
+""")
+code(r"""
+# 4. Which variables are associated with which? Cramér's V for every pair of categorical variables, strongest first
+from scipy.stats import chi2_contingency
+import numpy as np
+
+def cramers_v(df):
+    cats = [c for c in df.columns if df[c].dtype == object]
+    out = {}
+    for i, a in enumerate(cats):
+        for b in cats[i + 1:]:
+            table = pd.crosstab(df[a], df[b])
+            chi2 = chi2_contingency(table)[0]
+            out[f"{a} ~ {b}"] = np.sqrt(chi2 / (table.values.sum() * (min(table.shape) - 1)))
+    return pd.Series(out)
+
+pd.concat({"real": cramers_v(real), "synthetic": cramers_v(syn_trained)}, axis=1).sort_values("real", ascending=False).round(2)
+""")
+code(r"""
+# 5. Correlations between all variables (categories turned into 0/1 columns): real, synthetic, and the difference
 import seaborn as sns
 
-real_corr = pd.get_dummies(tabular_data, dtype=float).corr()
+real_corr = pd.get_dummies(real, dtype=float).corr()
 syn_corr  = pd.get_dummies(syn_trained, dtype=float).corr().reindex_like(real_corr)
 
 fig, axes = plt.subplots(1, 3, figsize=(20, 6))
@@ -158,26 +193,34 @@ print("average absolute difference in correlation:", round(float((real_corr - sy
 md(r"""
 ### The same regression on both datasets
 
-A logistic regression of high income on age, working hours, sex and education. If the synthetic data is useful, the coefficients point the same way and have a similar size.
+A logistic regression of high income on age, education and marital status, fitted once on the real data and once on the synthetic data. The plot shows each coefficient with its 95% confidence interval. If the synthetic data is useful, the dots sit close together and on the same side of zero.
 """)
 code(r"""
 import statsmodels.formula.api as smf
 
-formula = "high ~ age + hours_per_week + C(sex) + C(education)"
+formula = "high ~ age + C(education) + C(marital_status)"
 
 def fit_logit(df):
-    df = df.assign(high=(df["income"] == "high").astype(int))
-    return smf.logit(formula, data=df).fit(disp=0)
+    return smf.logit(formula, data=df.assign(high=(df["income"] == "high").astype(int))).fit(disp=0)
 
-real_fit, syn_fit = fit_logit(tabular_data), fit_logit(syn_trained)
-pd.DataFrame({"real coefficient": real_fit.params, "synthetic coefficient": syn_fit.params,
-              "real p-value": real_fit.pvalues, "synthetic p-value": syn_fit.pvalues}).round(3)
+real_fit, syn_fit = fit_logit(real), fit_logit(syn_trained)
+
+names = [n for n in real_fit.params.index if n != "Intercept"]
+y = np.arange(len(names))
+fig, ax = plt.subplots(figsize=(9, 4))
+for fit, offset, label in [(real_fit, 0.15, "real"), (syn_fit, -0.15, "synthetic")]:
+    ci = fit.conf_int().loc[names]
+    ax.errorbar(fit.params[names], y + offset, xerr=[fit.params[names] - ci[0], ci[1] - fit.params[names]], fmt="o", capsize=3, label=label)
+ax.axvline(0, color="grey", lw=1); ax.set_yticks(y); ax.set_yticklabels(names); ax.set_xlabel("coefficient (log-odds of high income)")
+ax.legend(); ax.set_title("Same logistic regression on real and synthetic data"); plt.tight_layout(); plt.show()
+
+pd.DataFrame({"real": real_fit.params, "synthetic": syn_fit.params}).round(2)
 """)
 md(r"""
 **What to take from this**
 
-* Where the real and synthetic coefficients agree in sign and rough size, a researcher could develop and test this analysis on the synthetic data and only run the final version on the real data.
-* Where they disagree, the synthetic data would have led you astray. That is why synthetic data must always be evaluated against the analysis you care about, not only on how it looks.
+* The conclusions match: high earners are older and work more hours, the income gradient over education levels is the same, married people earn more, and the regression coefficients agree in sign and size. A researcher could develop this analysis on the synthetic data and run the final version on the real data.
+* Not everything survives. This generator reproduces the link between **sex** and income less well. Add `+ C(sex)` to the formula and see the coefficient shrink. That is exactly why synthetic data must be evaluated against the analysis you care about, not only on how it looks.
 """)
 
 md(r"""
@@ -186,6 +229,7 @@ md(r"""
 * Change `epochs=40` to `epochs=100` in step 3 and run steps 3 to 5 again.
 * Ask for more rows than you had: `trained_model.sample(50000)`.
 * Run the regression of step 8 on your own 40-round synthetic data (`fit_logit(syn_data)`) and on the private one. How wrong would your conclusions be?
+* Add `+ C(sex)` to the regression formula in step 8. Which coefficient changes, and why might the generator miss it?
 * Upload your own CSV with the cell below, **public or already anonymised data only**, and train on it. Keep it to about 10 columns with few categories each, or training gets slow.
 """)
 code(r"""
